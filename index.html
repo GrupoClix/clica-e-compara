@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Clica e Compara</title>
+<meta name="description" content="Põe o preço e o tamanho de cada embalagem e vê qual compensa.">
+<meta name="theme-color" content="#143A8C">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='190 190 680 550'%3E%3Cg fill='none' stroke='%23143A8C' stroke-width='70' stroke-linecap='round'%3E%3Cpath d='M230 560 L400 700'/%3E%3Cpath d='M400 700 Q650 560 830 230'/%3E%3C/g%3E%3C/svg%3E">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Manrope:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<!--APP-START-->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="cc-check" viewBox="190 190 680 550">
+    <path d="M230 560 L400 700" fill="none" stroke="currentColor" stroke-width="70" stroke-linecap="round"/>
+    <path d="M400 700 Q650 560 830 230" fill="none" stroke="currentColor" stroke-width="70" stroke-linecap="round"/>
+  </symbol>
+</svg>
+
+<div class="wrap">
+  <header class="topo">
+    <h1 class="marca">
+      <svg class="logo" width="35" height="28" aria-hidden="true"><use href="#cc-check"/></svg>
+      <span class="wordmark">Clica e Compara</span>
+    </h1>
+    <p class="apoio">Põe o preço e o tamanho de cada embalagem e vê qual compensa.</p>
+    <div class="acoes">
+      <button type="button" class="btn sec" id="exemplo">Vê um exemplo</button>
+      <button type="button" class="btn sec" id="limpa">Limpa tudo</button>
+    </div>
+  </header>
+
+  <main class="principal">
+    <section class="bloco" aria-label="Produto e estabelecimento">
+      <div class="campo">
+        <label for="produto">Produto</label>
+        <input id="produto" class="field" type="text" maxlength="80" autocomplete="off" placeholder="Leite em pó Camponesa">
+      </div>
+      <div class="campo">
+        <label for="estab">Onde tá comprando?</label>
+        <input id="estab" class="field" type="text" maxlength="80" autocomplete="off" list="estabs" placeholder="Atacadão Boa Vista" aria-describedby="estab-dica">
+        <datalist id="estabs"></datalist>
+        <p class="dica" id="estab-dica">Fica só no histórico deste aparelho.</p>
+      </div>
+    </section>
+
+    <section class="bloco" aria-labelledby="t-emb">
+      <h2 id="t-emb">Embalagens</h2>
+      <div id="lista" class="lista"></div>
+      <button type="button" class="btn sec cheio" id="add">Adiciona embalagem</button>
+    </section>
+
+    <section class="bloco" aria-labelledby="t-res">
+      <h2 id="t-res">Resultado</h2>
+      <div id="resultado" class="resultado" aria-live="polite"></div>
+    </section>
+
+    <section class="bloco salvar" aria-label="Salvar consulta">
+      <p class="nota editando" id="editando" hidden>Editando uma consulta salva. Altera os valores e atualiza.</p>
+      <div class="btns">
+        <button type="button" class="btn pri" id="salva">Salva consulta</button>
+        <button type="button" class="btn sec" id="salvaNova" hidden>Salva como nova</button>
+      </div>
+      <p class="aviso" id="aviso" role="status"></p>
+    </section>
+
+    <section class="bloco" aria-labelledby="t-hist">
+      <h2 id="t-hist">Histórico</h2>
+      <p class="nota vazio" id="histVazio">Nada salvo ainda. Quando o preço mudar, abre a consulta, altera o valor e atualiza.</p>
+      <ul id="histLista" class="hist"></ul>
+      <button type="button" class="btn sec cheio" id="histApaga" hidden>Apaga o histórico</button>
+    </section>
+  </main>
+
+  <footer class="rodape">Uma empresa do Grupo Clix</footer>
+</div>
+<!--APP-END-->
+<script src="app.js"></script>
+<script src="pwa.js"></script>
+</body>
+</html>
