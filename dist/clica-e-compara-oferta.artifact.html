@@ -266,6 +266,13 @@ select.field { appearance: auto; padding-right: 10px; }
 .mais .conteudo { gap: 10px; }
 .mais .field { max-width: none; }
 .mais .conteudo .dupla label { min-width: 0; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  min-height: 44px; padding: 0 16px; border-radius: 999px; background: var(--branco);
+  border: 1.5px solid var(--tinta-suave); color: var(--tinta); font: 600 14px/1 var(--font-ui); cursor: pointer;
+}
+.chip.on { background: var(--azul-cobalto); border-color: var(--azul-cobalto); color: var(--branco); }
+.chip:focus-visible { outline: 2px solid transparent; box-shadow: 0 0 0 2px var(--branco), 0 0 0 5px var(--azul-cobalto); }
 
 </style>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
@@ -299,7 +306,14 @@ select.field { appearance: auto; padding-right: 10px; }
       <div class="campo">
         <label for="uso">Como medir o uso? (opcional)</label>
         <input id="uso" class="field" type="text" maxlength="20" autocomplete="off" placeholder="lavagem" aria-describedby="uso-dica">
-        <p class="dica" id="uso-dica">Se cada oferta disser quantos usos rende, o app compara por uso. Ex.: lavagem, folha, fralda.</p>
+        <div class="chips" id="chipsUso" role="group" aria-label="Sugestões de uso">
+          <button type="button" class="chip" data-uso="lavagem">lavagem</button>
+          <button type="button" class="chip" data-uso="folha">folha</button>
+          <button type="button" class="chip" data-uso="metro">metro</button>
+          <button type="button" class="chip" data-uso="porção">porção</button>
+          <button type="button" class="chip" data-uso="dia">dia</button>
+        </div>
+        <p class="dica" id="uso-dica">Se cada oferta disser quantos usos rende, o app compara por uso. Toca numa sugestão ou escreve o seu.</p>
       </div>
     </section>
 
@@ -477,7 +491,7 @@ select.field { appearance: auto; padding-right: 10px; }
 
         '<details class="mais rende"><summary>Rende quantos usos?</summary><div class="conteudo">' +
           '<label>Usos por embalagem<input class="field num usos" inputmode="decimal" autocomplete="off" placeholder="40" aria-label="Quantos usos rende a oferta ' + L + '"></label>' +
-          '<p class="dica">Exemplo: sabão que rende 40 lavagens. Põe 40 e o nome do uso lá em cima. Se todas as ofertas tiverem usos, o app compara por uso.</p>' +
+          '<p class="dica usos-dica"></p>' +
         "</div></details>" +
 
         '<details class="mais itens"><summary>Vem com vários itens iguais?</summary><div class="conteudo">' +
@@ -500,7 +514,31 @@ select.field { appearance: auto; padding-right: 10px; }
       lista.appendChild(a);
     });
     $("#add").hidden = pkgs.length >= MAX;
+    atualizaDicasUso();
   }
+
+  // Sugestões de uso: o exemplo do campo muda conforme o uso escolhido
+  const EXEMPLOS_USO = {
+    "lavagem": "sabão que rende 40 lavagens",
+    "folha": "papel toalha com 120 folhas",
+    "metro": "papel higiênico com 30 metros",
+    "porção": "café que rende 50 porções",
+    "dia": "ração que dura 30 dias"
+  };
+  function atualizaDicasUso() {
+    const n = nomeUso();
+    const ex = EXEMPLOS_USO[n];
+    const texto = ex
+      ? "Exemplo: " + ex + ". Põe só o número. Se todas as ofertas tiverem esse número, o app compara por " + n + "."
+      : "Põe quantos " + n + " a embalagem rende, só o número. Se todas as ofertas tiverem, o app compara por " + n + ".";
+    document.querySelectorAll(".usos-dica").forEach((d) => { d.textContent = texto; });
+    document.querySelectorAll("#chipsUso .chip").forEach((c) => {
+      const on = c.dataset.uso === n && limpaTexto($("#uso").value) !== "";
+      c.setAttribute("aria-pressed", on ? "true" : "false");
+      c.classList.toggle("on", on);
+    });
+  }
+  function aoMudarUso() { atualizaDicasUso(); mostraResultado(); }
 
   function acharPkg(no) {
     const a = no.closest(".pkg");
@@ -693,7 +731,15 @@ select.field { appearance: auto; padding-right: 10px; }
     mostraResultado();
   });
   $("#produto").addEventListener("input", esconderTexto);
-  $("#uso").addEventListener("input", mostraResultado);
+  $("#uso").addEventListener("input", aoMudarUso);
+  // Tocar numa sugestão preenche o campo; tocar de novo na mesma limpa
+  $("#chipsUso").addEventListener("click", (e) => {
+    const c = e.target.closest(".chip");
+    if (!c) return;
+    const campo = $("#uso");
+    campo.value = limpaTexto(campo.value).toLowerCase() === c.dataset.uso ? "" : c.dataset.uso;
+    aoMudarUso();
+  });
 
   /* ---------- Cálculo ---------- */
   // Preço por unidade base = preço efetivo ÷ (quantidade × itens × fator da unidade)

@@ -262,3 +262,10 @@ select.field { appearance: auto; padding-right: 10px; }
 .mais .conteudo { gap: 10px; }
 .mais .field { max-width: none; }
 .mais .conteudo .dupla label { min-width: 0; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  min-height: 44px; padding: 0 16px; border-radius: 999px; background: var(--branco);
+  border: 1.5px solid var(--tinta-suave); color: var(--tinta); font: 600 14px/1 var(--font-ui); cursor: pointer;
+}
+.chip.on { background: var(--azul-cobalto); border-color: var(--azul-cobalto); color: var(--branco); }
+.chip:focus-visible { outline: 2px solid transparent; box-shadow: 0 0 0 2px var(--branco), 0 0 0 5px var(--azul-cobalto); }

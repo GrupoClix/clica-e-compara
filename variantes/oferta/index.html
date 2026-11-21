@@ -45,7 +45,14 @@
       <div class="campo">
         <label for="uso">Como medir o uso? (opcional)</label>
         <input id="uso" class="field" type="text" maxlength="20" autocomplete="off" placeholder="lavagem" aria-describedby="uso-dica">
-        <p class="dica" id="uso-dica">Se cada oferta disser quantos usos rende, o app compara por uso. Ex.: lavagem, folha, fralda.</p>
+        <div class="chips" id="chipsUso" role="group" aria-label="Sugestões de uso">
+          <button type="button" class="chip" data-uso="lavagem">lavagem</button>
+          <button type="button" class="chip" data-uso="folha">folha</button>
+          <button type="button" class="chip" data-uso="metro">metro</button>
+          <button type="button" class="chip" data-uso="porção">porção</button>
+          <button type="button" class="chip" data-uso="dia">dia</button>
+        </div>
+        <p class="dica" id="uso-dica">Se cada oferta disser quantos usos rende, o app compara por uso. Toca numa sugestão ou escreve o seu.</p>
       </div>
     </section>
 

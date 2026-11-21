@@ -152,7 +152,7 @@
 
         '<details class="mais rende"><summary>Rende quantos usos?</summary><div class="conteudo">' +
           '<label>Usos por embalagem<input class="field num usos" inputmode="decimal" autocomplete="off" placeholder="40" aria-label="Quantos usos rende a oferta ' + L + '"></label>' +
-          '<p class="dica">Exemplo: sabão que rende 40 lavagens. Põe 40 e o nome do uso lá em cima. Se todas as ofertas tiverem usos, o app compara por uso.</p>' +
+          '<p class="dica usos-dica"></p>' +
         "</div></details>" +
 
         '<details class="mais itens"><summary>Vem com vários itens iguais?</summary><div class="conteudo">' +
@@ -175,7 +175,31 @@
       lista.appendChild(a);
     });
     $("#add").hidden = pkgs.length >= MAX;
+    atualizaDicasUso();
   }
+
+  // Sugestões de uso: o exemplo do campo muda conforme o uso escolhido
+  const EXEMPLOS_USO = {
+    "lavagem": "sabão que rende 40 lavagens",
+    "folha": "papel toalha com 120 folhas",
+    "metro": "papel higiênico com 30 metros",
+    "porção": "café que rende 50 porções",
+    "dia": "ração que dura 30 dias"
+  };
+  function atualizaDicasUso() {
+    const n = nomeUso();
+    const ex = EXEMPLOS_USO[n];
+    const texto = ex
+      ? "Exemplo: " + ex + ". Põe só o número. Se todas as ofertas tiverem esse número, o app compara por " + n + "."
+      : "Põe quantos " + n + " a embalagem rende, só o número. Se todas as ofertas tiverem, o app compara por " + n + ".";
+    document.querySelectorAll(".usos-dica").forEach((d) => { d.textContent = texto; });
+    document.querySelectorAll("#chipsUso .chip").forEach((c) => {
+      const on = c.dataset.uso === n && limpaTexto($("#uso").value) !== "";
+      c.setAttribute("aria-pressed", on ? "true" : "false");
+      c.classList.toggle("on", on);
+    });
+  }
+  function aoMudarUso() { atualizaDicasUso(); mostraResultado(); }
 
   function acharPkg(no) {
     const a = no.closest(".pkg");
@@ -368,7 +392,15 @@
     mostraResultado();
   });
   $("#produto").addEventListener("input", esconderTexto);
-  $("#uso").addEventListener("input", mostraResultado);
+  $("#uso").addEventListener("input", aoMudarUso);
+  // Tocar numa sugestão preenche o campo; tocar de novo na mesma limpa
+  $("#chipsUso").addEventListener("click", (e) => {
+    const c = e.target.closest(".chip");
+    if (!c) return;
+    const campo = $("#uso");
+    campo.value = limpaTexto(campo.value).toLowerCase() === c.dataset.uso ? "" : c.dataset.uso;
+    aoMudarUso();
+  });
 
   /* ---------- Cálculo ---------- */
   // Preço por unidade base = preço efetivo ÷ (quantidade × itens × fator da unidade)

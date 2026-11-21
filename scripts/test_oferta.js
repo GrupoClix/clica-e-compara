@@ -98,6 +98,18 @@ const ok = (c, m) => { console.log((c ? "OK   " : "FALHA ") + m); if (!c) falhas
   t = await txt(); ok(/R\$ 0,221\s*\/lavagem/.test(t), "usos + leve 3 pague 2 -> R$ 0,221/lavagem");
   await limpaPromo(0);
 
+  // sugestões de uso
+  ok((await p.locator('#chipsUso .chip[aria-pressed="true"]').innerText()) === "lavagem", "chip 'lavagem' marcado pelo exemplo");
+  ok((await p.locator(".usos-dica").first().innerText()).includes("sabão que rende 40 lavagens"), "exemplo do campo acompanha o uso");
+  await p.click('#chipsUso [data-uso="folha"]');
+  ok((await p.inputValue("#uso")) === "folha" && (await p.locator(".usos-dica").first().innerText()).includes("papel toalha com 120 folhas"), "chip 'folha' preenche e troca o exemplo");
+  ok(/R\$ 0,332\s*\/folha/.test(await txt()), "resultado usa o nome do chip");
+  await p.click('#chipsUso [data-uso="folha"]');
+  ok((await p.inputValue("#uso")) === "", "tocar de novo no chip limpa");
+  await p.fill("#uso", "xícara");
+  ok((await p.locator(".usos-dica").first().innerText()).includes("quantos xícara"), "uso livre sem exemplo pronto");
+  await p.click('#chipsUso [data-uso="lavagem"]');
+
   // copia a oferta (por lavagem)
   await p.click("#copia");
   await p.waitForTimeout(150);
