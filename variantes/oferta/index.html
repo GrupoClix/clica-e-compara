@@ -42,6 +42,11 @@
         <label for="produto">O que tá comparando?</label>
         <input id="produto" class="field" type="text" maxlength="80" autocomplete="off" placeholder="Sabão líquido">
       </div>
+      <div class="campo">
+        <label for="uso">Como medir o uso? (opcional)</label>
+        <input id="uso" class="field" type="text" maxlength="20" autocomplete="off" placeholder="lavagem" aria-describedby="uso-dica">
+        <p class="dica" id="uso-dica">Se cada oferta disser quantos usos rende, o app compara por uso. Ex.: lavagem, folha, fralda.</p>
+      </div>
     </section>
 
     <section class="bloco" aria-labelledby="t-emb">
@@ -54,7 +59,7 @@
       <h2 id="t-res">Resultado</h2>
       <div id="resultado" class="resultado" aria-live="polite"></div>
       <div class="copiar" id="copiar" hidden>
-        <button type="button" class="btn pri cheio" id="copia">Copia pro grupo</button>
+        <button type="button" class="btn pri cheio" id="copia">Copia a oferta</button>
         <textarea id="copiaTexto" class="field" rows="5" readonly hidden aria-label="Texto pra colar no grupo"></textarea>
         <p class="aviso" id="aviso" role="status"></p>
       </div>

@@ -260,6 +260,12 @@ label, legend { font: 600 14px/1.3 var(--font-ui); }
 .copiar textarea { padding: 12px 14px; min-height: 120px; font: 500 14px/1.5 var(--font-ui); resize: vertical; }
 .row .loja { font-size: 13px; color: var(--tinta-suave); font-weight: 600; }
 @media print { .copiar { display: none !important; } }
+.promo-msg { color: var(--tinta); font-weight: 600; }
+select.field { appearance: auto; padding-right: 10px; }
+.mais .conteudo > label, .mais .conteudo .g-seg label { display: flex; flex-direction: column; gap: 6px; }
+.mais .conteudo { gap: 10px; }
+.mais .field { max-width: none; }
+.mais .conteudo .dupla label { min-width: 0; }
 
 </style>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
@@ -290,6 +296,11 @@ label, legend { font: 600 14px/1.3 var(--font-ui); }
         <label for="produto">O que tá comparando?</label>
         <input id="produto" class="field" type="text" maxlength="80" autocomplete="off" placeholder="Sabão líquido">
       </div>
+      <div class="campo">
+        <label for="uso">Como medir o uso? (opcional)</label>
+        <input id="uso" class="field" type="text" maxlength="20" autocomplete="off" placeholder="lavagem" aria-describedby="uso-dica">
+        <p class="dica" id="uso-dica">Se cada oferta disser quantos usos rende, o app compara por uso. Ex.: lavagem, folha, fralda.</p>
+      </div>
     </section>
 
     <section class="bloco" aria-labelledby="t-emb">
@@ -302,7 +313,7 @@ label, legend { font: 600 14px/1.3 var(--font-ui); }
       <h2 id="t-res">Resultado</h2>
       <div id="resultado" class="resultado" aria-live="polite"></div>
       <div class="copiar" id="copiar" hidden>
-        <button type="button" class="btn pri cheio" id="copia">Copia pro grupo</button>
+        <button type="button" class="btn pri cheio" id="copia">Copia a oferta</button>
         <textarea id="copiaTexto" class="field" rows="5" readonly hidden aria-label="Texto pra colar no grupo"></textarea>
         <p class="aviso" id="aviso" role="status"></p>
       </div>
@@ -314,8 +325,11 @@ label, legend { font: 600 14px/1.3 var(--font-ui); }
 <script>
 /* Clica e Compara Ofertas — variante para comparar ofertas de marcas e lojas diferentes.
    Protótipo: sem banco de dados, sem histórico, sem envio de nada.
-   Novidades em relação ao app principal: marca e loja por oferta, promoção
-   ("leve X, pague Y" e desconto extra) e o botão "Copia pro grupo". */
+   Novidades em relação ao app principal:
+   - marca e loja por oferta;
+   - promoções: "leve X, pague Y", desconto na 2ª unidade, desconto extra (cartão) e cashback;
+   - preço por uso (ex.: por lavagem), quando todas as ofertas dizem quantos usos rendem;
+   - botão "Copia a oferta" com um texto curto pro WhatsApp. */
 (function () {
   "use strict";
 
@@ -338,6 +352,7 @@ label, legend { font: 600 14px/1.3 var(--font-ui); }
   /* ---------- Formatação (padrão brasileiro) ---------- */
   const brl2 = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const brl3 = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 3, maximumFractionDigits: 3 });
+  // Abaixo de R$ 1,00 mostra 3 casas decimais
   const dinheiro = (v) => (v < 1 ? brl3 : brl2).format(v).replace(/ /g, " ");
   const fmtNum = (v) => v.toLocaleString("pt-BR", { maximumFractionDigits: 3 });
 
@@ -358,15 +373,19 @@ label, legend { font: 600 14px/1.3 var(--font-ui); }
   }
   const simbolo = (w, h) => '<svg width="' + w + '" height="' + h + '" aria-hidden="true"><use href="#cc-check"/></svg>';
   const limpaTexto = (s) => String(s || "").replace(/[\u0000-\u001F\u007F]/g, "").replace(/\s+/g, " ").trim().slice(0, 80);
+  // Nome do "uso" (lavagem, folha, fralda...). Sem nome, vira "uso".
+  const nomeUso = () => limpaTexto($("#uso").value).slice(0, 20).toLowerCase() || "uso";
 
   /* ---------- Estado ---------- */
   let proxId = 1;
   let pkgs = [];
-  let ultimo = [];                   // grupos do último resultado (usado pelo "Copia pro grupo")
+  let ultimo = [];                   // grupos do último resultado (usado pelo "Copia a oferta")
   const ultimoMelhor = {};
 
   const novaPkg = (o) => Object.assign({
-    id: proxId++, nome: "", loja: "", preco: "", qtd: "", unidade: "g", itens: "", leve: "", pague: "", desc: ""
+    id: proxId++, nome: "", loja: "", preco: "", qtd: "", unidade: "g", itens: "", usos: "",
+    promo: "",               // "", "lp" (leve/pague) ou "seg" (desconto na 2ª unidade)
+    leve: "", pague: "", seg: "", desc: "", cash: ""
   }, o || {});
 
   /* ---------- Campo de preço (mesma máscara do app principal) ---------- */
@@ -434,16 +453,34 @@ label, legend { font: 600 14px/1.3 var(--font-ui); }
           '<label>Quantidade<input class="field num qty" inputmode="decimal" autocomplete="off" placeholder="Digita" aria-label="Quantidade da oferta ' + L + '"></label>' +
         "</div>" +
         '<fieldset class="seg"><legend class="sr">Unidade da oferta ' + L + '</legend><div class="seg-linha">' + unidades + "</div></fieldset>" +
+
         '<details class="mais promo"><summary>Tem promoção?</summary><div class="conteudo">' +
-          '<div class="tres">' +
+          '<label>Promoção da loja<select class="field promo-tipo" aria-label="Tipo de promoção da oferta ' + L + '">' +
+            '<option value="">Nenhuma</option>' +
+            '<option value="lp">Leve X, pague Y</option>' +
+            '<option value="seg">Desconto na 2ª unidade</option>' +
+          "</select></label>" +
+          '<div class="dupla g-lp" hidden>' +
             '<label>Leve<input class="field num leve" inputmode="numeric" autocomplete="off" placeholder="3" aria-label="Leve quantas, oferta ' + L + '"></label>' +
             '<label>Pague<input class="field num pague" inputmode="numeric" autocomplete="off" placeholder="2" aria-label="Pague quantas, oferta ' + L + '"></label>' +
-            '<label>Desconto %<input class="field num desc" inputmode="decimal" autocomplete="off" placeholder="10" aria-label="Desconto extra em porcentagem, oferta ' + L + '"></label>' +
+          "</div>" +
+          '<div class="g-seg" hidden>' +
+            '<label>Desconto na 2ª unidade (%)<input class="field num seg2" inputmode="decimal" autocomplete="off" placeholder="50" aria-label="Desconto na segunda unidade em porcentagem, oferta ' + L + '"></label>' +
+          "</div>" +
+          '<div class="dupla">' +
+            '<label>Desconto extra (%)<input class="field num desc" inputmode="decimal" autocomplete="off" placeholder="10" aria-label="Desconto extra em porcentagem, oferta ' + L + '"></label>' +
+            '<label>Cashback (R$)<input class="field num cash" inputmode="decimal" autocomplete="off" placeholder="5" aria-label="Cashback em reais por embalagem, oferta ' + L + '"></label>' +
           "</div>" +
           '<p class="dica promo-msg"></p>' +
-          '<p class="dica">Exemplo: leve 3, pague 2. O desconto extra é de cartão da loja ou cashback.</p>' +
+          '<p class="dica">Desconto na 2ª unidade vale comprando duas. Desconto extra é de cartão da loja. Cashback é o que volta em reais por embalagem.</p>' +
         "</div></details>" +
-        '<details class="mais"><summary>Vem com vários itens iguais?</summary><div class="conteudo">' +
+
+        '<details class="mais rende"><summary>Rende quantos usos?</summary><div class="conteudo">' +
+          '<label>Usos por embalagem<input class="field num usos" inputmode="decimal" autocomplete="off" placeholder="40" aria-label="Quantos usos rende a oferta ' + L + '"></label>' +
+          '<p class="dica">Exemplo: sabão que rende 40 lavagens. Põe 40 e o nome do uso lá em cima. Se todas as ofertas tiverem usos, o app compara por uso.</p>' +
+        "</div></details>" +
+
+        '<details class="mais itens"><summary>Vem com vários itens iguais?</summary><div class="conteudo">' +
           '<label>Número de itens<input class="field num items" inputmode="numeric" autocomplete="off" placeholder="1"></label>' +
           '<p class="dica">Exemplo: fardo com 6 latas de 350 ml. Quantidade 350 ml, número de itens 6.</p>' +
         "</div></details>";
@@ -453,12 +490,13 @@ label, legend { font: 600 14px/1.3 var(--font-ui); }
       atualizaFantasma(a.querySelector(".price"));
       a.querySelector(".qty").value = p.qtd;
       a.querySelector(".items").value = p.itens;
-      a.querySelector(".leve").value = p.leve;
-      a.querySelector(".pague").value = p.pague;
-      a.querySelector(".desc").value = p.desc;
-      if (p.itens !== "" && num(p.itens) !== 1) a.querySelector(".mais:not(.promo)").open = true;
-      if (p.leve || p.pague || p.desc) a.querySelector(".promo").open = true;
-      atualizaPromoMsg(a, p);
+      a.querySelector(".usos").value = p.usos;
+      a.querySelector(".promo-tipo").value = p.promo;
+      ["leve", "pague", "seg", "desc", "cash"].forEach((c) => { a.querySelector("." + (c === "seg" ? "seg2" : c)).value = p[c]; });
+      if (p.itens !== "" && num(p.itens) !== 1) a.querySelector(".itens").open = true;
+      if (p.usos !== "") a.querySelector(".rende").open = true;
+      if (p.promo || p.desc || p.cash) a.querySelector(".promo").open = true;
+      atualizaPromoUI(a, p);
       lista.appendChild(a);
     });
     $("#add").hidden = pkgs.length >= MAX;
@@ -472,46 +510,82 @@ label, legend { font: 600 14px/1.3 var(--font-ui); }
   }
 
   /* ---------- Promoção ----------
-     Leve X, pague Y: o preço de cada embalagem vira preço × Y ÷ X.
-     Desconto extra (%): tira essa porcentagem do valor final.
+     preço efetivo da embalagem = preço × fator − cashback
+     - leve X, pague Y:       fator × (Y ÷ X)
+     - 2ª unidade com D% off: fator × (1 − D ÷ 200)   (comprando duas, a média cai D/2 %)
+     - desconto extra E%:     fator × (1 − E ÷ 100)
+     - cashback R$ C:         tira C de cada embalagem
      Promoção inválida é ignorada e a pessoa é avisada no próprio cartão. */
-  function promo(p) {
-    const leve = p.leve === "" ? NaN : Number(p.leve);
-    const pague = p.pague === "" ? NaN : Number(p.pague);
-    const desc = p.desc === "" ? 0 : num(p.desc);
-    const temLP = p.leve !== "" || p.pague !== "";
-    let fator = 1, erro = "", textos = [];
-    if (temLP) {
-      if (Number.isInteger(leve) && Number.isInteger(pague) && leve >= 2 && pague >= 1 && pague < leve) {
+  function promo(p, preco) {
+    let fator = 1, cash = 0;
+    const textos = [], erros = {};
+    if (p.promo === "lp") {
+      const leve = p.leve === "" ? NaN : Number(p.leve);
+      const pague = p.pague === "" ? NaN : Number(p.pague);
+      if (p.leve === "" && p.pague === "") {
+        // ainda não preencheu: nada a aplicar
+      } else if (Number.isInteger(leve) && Number.isInteger(pague) && leve >= 2 && pague >= 1 && pague < leve) {
         fator *= pague / leve;
         textos.push("Leve " + leve + ", pague " + pague);
       } else {
-        erro = "Pra valer, leve precisa ser maior que pague. Ex.: leve 3, pague 2.";
+        erros.lp = "Pra valer, leve precisa ser maior que pague. Ex.: leve 3, pague 2.";
+      }
+    } else if (p.promo === "seg" && p.seg !== "") {
+      const d = num(p.seg);
+      if (d > 0 && d <= 100) {
+        fator *= 1 - d / 200;
+        textos.push(fmtNum(d) + "% na 2ª unidade, comprando 2");
+      } else {
+        erros.seg = "O desconto da 2ª unidade tem que ficar entre 0 e 100%.";
       }
     }
     if (p.desc !== "") {
-      if (desc > 0 && desc < 100) {
-        fator *= 1 - desc / 100;
-        textos.push(fmtNum(desc) + "% de desconto");
-      } else if (!erro) {
-        erro = "Desconto tem que ficar entre 0 e 100%.";
+      const d = num(p.desc);
+      if (d > 0 && d < 100) {
+        fator *= 1 - d / 100;
+        textos.push(fmtNum(d) + "% de desconto extra");
+      } else {
+        erros.desc = "O desconto extra tem que ficar entre 0 e 100%.";
       }
     }
-    return { fator, erro, texto: textos.join(" + ") };
+    if (p.cash !== "") {
+      const c = num(p.cash);
+      if (c > 0 && (!(preco > 0) || preco * fator - c > 0)) {
+        cash = c;
+        textos.push(dinheiro(c) + " de cashback");
+      } else {
+        erros.cash = "O cashback precisa ser maior que zero e menor que o preço.";
+      }
+    }
+    const msg = erros.lp || erros.seg || erros.desc || erros.cash || "";
+    return { fator, cash, erros, msg, texto: textos.join(" + ") };
   }
-  function atualizaPromoMsg(cartao, p) {
+
+  // Mostra só os campos do tipo de promoção escolhido e marca os campos com erro
+  function atualizaPromoUI(cartao, p) {
+    cartao.querySelector(".g-lp").hidden = p.promo !== "lp";
+    cartao.querySelector(".g-seg").hidden = p.promo !== "seg";
+    const r = promo(p, num(p.preco));
     const m = cartao.querySelector(".promo-msg");
-    const r = promo(p);
-    m.textContent = r.erro;
-    m.hidden = !r.erro;
-    ["leve", "pague", "desc"].forEach((c) => cartao.querySelector("." + c).classList.toggle("invalido", !!r.erro));
+    m.textContent = r.msg;
+    m.hidden = !r.msg;
+    cartao.querySelector(".leve").classList.toggle("invalido", !!r.erros.lp);
+    cartao.querySelector(".pague").classList.toggle("invalido", !!r.erros.lp);
+    cartao.querySelector(".seg2").classList.toggle("invalido", !!r.erros.seg);
+    cartao.querySelector(".desc").classList.toggle("invalido", !!r.erros.desc);
+    cartao.querySelector(".cash").classList.toggle("invalido", !!r.erros.cash);
   }
+
+  const soDigitos = (v, n) => v.replace(/\D/g, "").slice(0, n);
+  const soDecimal = (v, n) => v.replace(/[^\d.,]/g, "").slice(0, n);
 
   function aoMudar(e) {
     const p = acharPkg(e.target);
     if (!p) return;
     const t = e.target;
-    if (t.classList.contains("price")) {
+    const c = t.classList;
+    const campoLimpo = (chave, valor) => { p[chave] = valor; if (t.value !== valor) t.value = valor; };
+    if (c.contains("price")) {
       const limpo = limpaPreco(t.value);
       if (t.value !== limpo) {
         t.value = limpo;
@@ -519,28 +593,19 @@ label, legend { font: 600 14px/1.3 var(--font-ui); }
       }
       p.preco = limpo;
       atualizaFantasma(t);
-    } else if (t.classList.contains("qty")) {
-      p.qtd = t.value.replace(/[^\d.,]/g, "");
-      if (t.value !== p.qtd) t.value = p.qtd;
-    } else if (t.classList.contains("items")) {
-      p.itens = t.value.replace(/\D/g, "").slice(0, 4);
-      if (t.value !== p.itens) t.value = p.itens;
-    } else if (t.classList.contains("leve") || t.classList.contains("pague")) {
-      const c = t.classList.contains("leve") ? "leve" : "pague";
-      p[c] = t.value.replace(/\D/g, "").slice(0, 3);
-      if (t.value !== p[c]) t.value = p[c];
-      atualizaPromoMsg(t.closest(".pkg"), p);
-    } else if (t.classList.contains("desc")) {
-      p.desc = t.value.replace(/[^\d.,]/g, "").slice(0, 5);
-      if (t.value !== p.desc) t.value = p.desc;
-      atualizaPromoMsg(t.closest(".pkg"), p);
-    } else if (t.classList.contains("nome")) {
-      p.nome = t.value;
-    } else if (t.classList.contains("loja")) {
-      p.loja = t.value;
-    } else if (t.type === "radio") {
-      p.unidade = t.value;
-    }
+    } else if (c.contains("qty")) campoLimpo("qtd", soDecimal(t.value, 10));
+    else if (c.contains("items")) campoLimpo("itens", soDigitos(t.value, 4));
+    else if (c.contains("usos")) campoLimpo("usos", soDecimal(t.value, 8));
+    else if (c.contains("leve")) campoLimpo("leve", soDigitos(t.value, 3));
+    else if (c.contains("pague")) campoLimpo("pague", soDigitos(t.value, 3));
+    else if (c.contains("seg2")) campoLimpo("seg", soDecimal(t.value, 5));
+    else if (c.contains("desc")) campoLimpo("desc", soDecimal(t.value, 5));
+    else if (c.contains("cash")) campoLimpo("cash", soDecimal(t.value, 9));
+    else if (c.contains("promo-tipo")) p.promo = t.value;
+    else if (c.contains("nome")) p.nome = t.value;
+    else if (c.contains("loja")) p.loja = t.value;
+    else if (t.type === "radio") p.unidade = t.value;
+    atualizaPromoUI(t.closest(".pkg"), p);
     mostraResultado();
   }
 
@@ -588,6 +653,7 @@ label, legend { font: 600 14px/1.3 var(--font-ui); }
     const p = acharPkg(t);
     if (p) p.preco = v;
     atualizaFantasma(t);
+    atualizaPromoUI(t.closest(".pkg"), p);
     mostraResultado();
   });
 
@@ -609,60 +675,79 @@ label, legend { font: 600 14px/1.3 var(--font-ui); }
     mostraResultado();
   });
 
-  function recomeca(produto) {
+  function recomeca(produto, uso) {
     pkgs = [novaPkg(), novaPkg()];
     $("#produto").value = produto || "";
+    $("#uso").value = uso || "";
     aviso("");
     esconderTexto();
     montaCartoes();
     mostraResultado();
   }
-  $("#limpa").addEventListener("click", () => recomeca(""));
+  $("#limpa").addEventListener("click", () => recomeca("", ""));
   $("#exemplo").addEventListener("click", () => {
-    recomeca("Sabão líquido");
+    recomeca("Sabão líquido", "lavagem");
     Object.assign(pkgs[0], { nome: "OMO", loja: "Pão de Açúcar", preco: "19,90", qtd: "3", unidade: "L" });
     Object.assign(pkgs[1], { nome: "Becker", loja: "Mercado do bairro", preco: "29,90", qtd: "5", unidade: "L" });
     montaCartoes();
     mostraResultado();
   });
-  $("#produto").addEventListener("input", () => { esconderTexto(); });
+  $("#produto").addEventListener("input", esconderTexto);
+  $("#uso").addEventListener("input", mostraResultado);
 
   /* ---------- Cálculo ---------- */
   // Preço por unidade base = preço efetivo ÷ (quantidade × itens × fator da unidade)
-  // Preço efetivo = preço da embalagem com a promoção aplicada
+  // Custo por uso = preço efetivo ÷ usos por embalagem (só quando a pessoa informa os usos)
   function calcula(lista) {
     return lista.map((p, i) => {
       const preco = num(p.preco);
       const qtd = num(p.qtd);
       const itens = p.itens === "" ? 1 : num(p.itens);
       const u = UNIDADES[p.unidade];
-      const pr = promo(p);
       const ok = preco > 0 && qtd > 0 && Number.isInteger(itens) && itens >= 1 && isFinite(preco * qtd * itens);
-      const efetivo = ok ? preco * (pr.erro ? 1 : pr.fator) : 0;
+      const pr = promo(p, preco);
+      // promoção com erro é ignorada (fator 1, sem cashback)
+      const fator = pr.msg ? 1 : pr.fator;
+      const cash = pr.msg ? 0 : pr.cash;
+      const efetivo = ok ? Math.max(preco * fator - cash, 0.01) : 0;
       const total = ok ? qtd * itens * u.f : 0;
+      const usos = p.usos === "" ? NaN : num(p.usos);
       return {
-        letra: LETRAS[i], ok, preco, efetivo, promoTexto: pr.erro ? "" : pr.texto,
+        letra: LETRAS[i], ok, preco, efetivo, promoTexto: pr.msg ? "" : pr.texto,
         qtd, itens, unidade: p.unidade, tipo: u.tipo, total,
+        usos: usos > 0 ? usos : 0,
         marca: limpaTexto(p.nome), loja: limpaTexto(p.loja),
-        up: ok ? efetivo / total : null
+        up: ok ? efetivo / total : null,
+        ref: null                       // valor usado pra comparar (por unidade base ou por uso)
       };
     });
   }
   const textoQtd = (r) => fmtNum(r.qtd) + " " + UNIDADES[r.unidade].rotulo + (r.itens > 1 ? " x " + r.itens : "");
-  // Sem marca, usa "Oferta A"
   const nomeDe = (r) => (r.marca || "Oferta " + r.letra) + ", " + textoQtd(r);
   const nomeComLoja = (r) => nomeDe(r) + (r.loja ? " (" + r.loja + ")" : "");
-  function detalhe(r) {
+
+  // Contexto de comparação do grupo: por unidade base (kg, L, unid.) ou por uso (lavagem...)
+  function contextoDe(modo, tipo) {
+    const t = TIPOS[tipo];
+    return modo === "uso" ? { por: nomeUso(), abrev: nomeUso() } : { por: t.por, abrev: t.abrev };
+  }
+
+  function detalhe(r, modo) {
+    const t = TIPOS[r.tipo];
     const partes = [textoQtd(r) + " por " + dinheiro(r.preco) + "."];
     if (r.promoTexto) partes.push(r.promoTexto + ": cada uma sai " + dinheiro(r.efetivo) + ".");
-    const t = TIPOS[r.tipo];
+    if (r.usos) {
+      partes.push(modo === "uso"
+        ? dinheiro(r.up) + " por " + t.abrev + "."
+        : dinheiro(r.efetivo / r.usos) + " por " + nomeUso() + ".");
+    }
     if (t.cem) partes.push(dinheiro(r.up / t.cem) + " por " + t.rotuloCem + ".");
     return partes.join(" ");
   }
 
   /* ---------- Resultado ---------- */
-  function cartaoMelhor(arr, empate) {
-    const t = TIPOS[arr[0].tipo];
+  function cartaoMelhor(arr, empate, modo) {
+    const cx = contextoDe(modo, arr[0].tipo);
     const melhor = arr[0];
     const pior = arr[arr.length - 1];
     const c = el("div", "best");
@@ -672,45 +757,41 @@ label, legend { font: 600 14px/1.3 var(--font-ui); }
     c.appendChild(k);
     c.appendChild(el("p", "nome", empate ? nomeDe(melhor) + " e " + nomeDe(arr[1]) : nomeDe(melhor)));
     if (!empate && melhor.loja) c.appendChild(el("p", "det", melhor.loja));
-    const p = el("p", "preco", dinheiro(melhor.up));
-    p.appendChild(el("small", "", "/" + t.abrev));
+    const p = el("p", "preco", dinheiro(melhor.ref));
+    p.appendChild(el("small", "", "/" + cx.abrev));
     c.appendChild(p);
     if (empate) {
-      c.appendChild(el("p", "eco", "O preço por " + t.por + " é praticamente o mesmo. Leva a que for mais útil."));
+      c.appendChild(el("p", "eco", "O preço por " + cx.por + " é praticamente o mesmo. Leva a que for mais útil."));
     } else {
-      c.appendChild(el("p", "eco", dinheiro(pior.up - melhor.up) + " a menos por " + t.por + " que a mais cara"));
-      c.appendChild(el("p", "det", detalhe(melhor)));
+      c.appendChild(el("p", "eco", dinheiro(pior.ref - melhor.ref) + " a menos por " + cx.por + " que a mais cara"));
+      c.appendChild(el("p", "det", detalhe(melhor, modo)));
     }
-    const chave = (empate ? "e" : "m") + melhor.letra;
-    if (ultimoMelhor[melhor.tipo] && ultimoMelhor[melhor.tipo].chave !== chave) ultimoMelhor[melhor.tipo] = { chave, quando: Date.now() };
-    else if (!ultimoMelhor[melhor.tipo]) ultimoMelhor[melhor.tipo] = { chave, quando: 0 };
+    const chave = (empate ? "e" : "m") + melhor.letra + modo;
+    const memo = ultimoMelhor[melhor.tipo];
+    if (memo && memo.chave !== chave) ultimoMelhor[melhor.tipo] = { chave, quando: Date.now() };
+    else if (!memo) ultimoMelhor[melhor.tipo] = { chave, quando: 0 };
     if (Date.now() - ultimoMelhor[melhor.tipo].quando < 400) c.classList.add("swap");
     return c;
   }
 
-  const pctMaisCaro = (r, melhor) => Math.max(1, Math.round((r.up / melhor.up - 1) * 100));
+  // "% mais caro" = (valor da oferta ÷ valor da melhor compra − 1) × 100, mínimo 1%
+  const pctMaisCaro = (r, melhor) => Math.max(1, Math.round((r.ref / melhor.ref - 1) * 100));
 
-  function linha(r, melhor) {
-    const t = TIPOS[r.tipo];
+  function linha(r, melhor, modo) {
+    const cx = contextoDe(modo, r.tipo);
     const li = el("li", "row");
     const esq = el("div");
     esq.appendChild(el("p", "nome", nomeDe(r)));
     if (r.loja) esq.appendChild(el("p", "loja", r.loja));
-    esq.appendChild(el("p", "det", detalhe(r)));
+    esq.appendChild(el("p", "det", detalhe(r, modo)));
     const dir = el("div", "dir");
-    const v = el("p", "val", dinheiro(r.up));
-    v.appendChild(el("small", "", "/" + t.abrev));
+    const v = el("p", "val", dinheiro(r.ref));
+    v.appendChild(el("small", "", "/" + cx.abrev));
     dir.appendChild(v);
     dir.appendChild(el("span", "selo", pctMaisCaro(r, melhor) + "% mais caro"));
     li.appendChild(esq);
     li.appendChild(dir);
     return li;
-  }
-
-  function flagraDe(arr, empate) {
-    const melhor = arr[0];
-    const maior = arr.reduce((m, r) => (r.total > m.total ? r : m), arr[0]);
-    return !empate && maior !== melhor && maior.up / melhor.up - 1 >= 0.005;
   }
 
   function grupoResultado(arr, vario) {
@@ -720,24 +801,35 @@ label, legend { font: 600 14px/1.3 var(--font-ui); }
       sec.appendChild(el("p", "vazio-res", "Põe outra oferta do mesmo tipo pra comparar."));
       return sec;
     }
-    arr.sort((a, b) => a.up - b.up);
+    // Por uso só quando TODAS as ofertas do grupo dizem quantos usos rendem
+    const modo = arr.every((r) => r.usos > 0) ? "uso" : "base";
+    arr.forEach((r) => { r.ref = modo === "uso" ? r.efetivo / r.usos : r.up; });
+    arr.sort((a, b) => a.ref - b.ref);
     const melhor = arr[0];
-    const empate = arr[1].up / melhor.up - 1 < 0.005;
-    sec.appendChild(cartaoMelhor(arr, empate));
-    const flagra = flagraDe(arr, empate);
+    // Empate: diferença entre as duas mais baratas menor que 0,5%
+    const empate = arr[1].ref / melhor.ref - 1 < 0.005;
+    const cx = contextoDe(modo, melhor.tipo);
+    if (modo === "base" && arr.some((r) => r.usos > 0)) {
+      sec.appendChild(el("p", "nota", "Põe os usos de todas as ofertas pra comparar por " + nomeUso() + "."));
+    }
+    sec.appendChild(cartaoMelhor(arr, empate, modo));
+
+    // Flagra: a embalagem de maior quantidade total não é a melhor compra
+    const maior = arr.reduce((m, r) => (r.total > m.total ? r : m), arr[0]);
+    const flagra = !empate && maior !== melhor && maior.ref / melhor.ref - 1 >= 0.005;
     if (flagra) {
       const f = el("div", "flagra");
       f.innerHTML = simbolo(25, 20);
       const txt = el("p");
       txt.innerHTML = "<strong>Flagra:</strong> ";
-      txt.appendChild(document.createTextNode("a embalagem maior sai mais cara por " + TIPOS[melhor.tipo].por + "."));
+      txt.appendChild(document.createTextNode("a embalagem maior sai mais cara por " + cx.por + "."));
       f.appendChild(txt);
       sec.appendChild(f);
     }
     const ul = el("ul", "ranking");
-    arr.slice(empate ? 2 : 1).forEach((r) => ul.appendChild(linha(r, melhor)));
+    arr.slice(empate ? 2 : 1).forEach((r) => ul.appendChild(linha(r, melhor, modo)));
     if (ul.children.length) sec.appendChild(ul);
-    ultimo.push({ arr, empate, flagra });
+    ultimo.push({ arr, empate, flagra, modo });
     return sec;
   }
 
@@ -758,23 +850,23 @@ label, legend { font: 600 14px/1.3 var(--font-ui); }
     esconderTexto();
   }
 
-  /* ---------- Copia pro grupo ---------- */
+  /* ---------- Copia a oferta ---------- */
   // Monta um texto curto, sem emoji, pra colar no WhatsApp
   function textoGrupo() {
     const produto = limpaTexto($("#produto").value);
     const linhas = ["Clica e Compara" + (produto ? ": " + produto : "")];
     ultimo.forEach((g) => {
-      const t = TIPOS[g.arr[0].tipo];
+      const cx = contextoDe(g.modo, g.arr[0].tipo);
       const melhor = g.arr[0];
       if (g.empate) {
-        linhas.push("Empate: " + nomeComLoja(melhor) + " e " + nomeComLoja(g.arr[1]) + ", a " + dinheiro(melhor.up) + "/" + t.abrev);
+        linhas.push("Empate: " + nomeComLoja(melhor) + " e " + nomeComLoja(g.arr[1]) + ", a " + dinheiro(melhor.ref) + "/" + cx.abrev);
       } else {
-        linhas.push("Melhor compra: " + nomeComLoja(melhor) + ", a " + dinheiro(melhor.up) + "/" + t.abrev);
+        linhas.push("Melhor compra: " + nomeComLoja(melhor) + ", a " + dinheiro(melhor.ref) + "/" + cx.abrev);
         if (melhor.promoTexto) linhas.push("(com promoção: " + melhor.promoTexto + ")");
         g.arr.slice(1).forEach((r) => {
-          linhas.push(nomeComLoja(r) + ": " + dinheiro(r.up) + "/" + t.abrev + ", " + pctMaisCaro(r, melhor) + "% mais caro");
+          linhas.push(nomeComLoja(r) + ": " + dinheiro(r.ref) + "/" + cx.abrev + ", " + pctMaisCaro(r, melhor) + "% mais caro");
         });
-        if (g.flagra) linhas.push("Flagra: a embalagem maior sai mais cara por " + t.por + ".");
+        if (g.flagra) linhas.push("Flagra: a embalagem maior sai mais cara por " + cx.por + ".");
       }
     });
     linhas.push("Compara só o preço, não a qualidade.");
